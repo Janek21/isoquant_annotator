@@ -34,6 +34,7 @@ mkdir -p "$species_name/data/input"
 function gtf_fix() { #gff to gtf conversion
 	awk '$3 != "region"' "$species_name/data/input/clean_annotation.gtf" > "$species_name/data/input/clean_annotation.tmp.gtf"
 	gffread "$species_name/data/input/clean_annotation.tmp.gtf" -T -o "$species_name/data/input/clean_annotation.fixed.gtf"
+	rm -f "$species_name/data/input/clean_annotation.tmp.gtf"
 	echo "GFF to GTF successful"
 }
 	
@@ -49,9 +50,11 @@ if [ -n "$plain_annotation" ]; then
 	gtf_fix
 elif [ -n "$gzipped_annotation" ]; then
 	echo "GFF compressed to GTF"
-	#uncompress annotation to species data folder
-	unpigz -c "$gzipped_annotation" | agat_convert_sp_gff2gtf.pl --gff - -o "$species_name/data/input/clean_annotation.gtf"
+	#uncompress to a real file first (AGAT --gff cannot read from stdin), then convert
+	unpigz -c "$gzipped_annotation" > "$species_name/data/input/raw_annotation.gff"
+	agat_convert_sp_gff2gtf.pl --gff "$species_name/data/input/raw_annotation.gff" -o "$species_name/data/input/clean_annotation.gtf"
 	gtf_fix
+	rm -f "$species_name/data/input/raw_annotation.gff"
 else #no annotation
 	echo "No annotation file found. IsoQuant will run in de novo mode (without --genedb)."
 	genedb_arg=""
