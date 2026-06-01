@@ -91,8 +91,8 @@ else #if no data from lyric
 		--job-name="ena_download_${sp}" \
 		--array=0-$(( srr_count - 1 )) \
 		--cpus-per-task=2 \
-		--mem=8G \
-		--time=180 \
+		--mem=4G \
+		--time=90 \
 		"$scripts_dir/srr_dw.sh" "$species_name")
 	echo "Download array submitted: job $dl_jobid"
 
@@ -120,5 +120,5 @@ ev_jobid=$(sbatch --parsable \
 	--cpus-per-task=4 \
 	--mem=12G \
 	--time=90 \
-	"$scripts_dir/evaluation.sh" "$species_name" "$busco_db")
+	"evaluation.sh" "$species_name" "$busco_db")
 echo "Evaluation submitted: job $ev_jobid (starts after job $iq_jobid)"
