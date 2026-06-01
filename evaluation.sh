@@ -113,7 +113,7 @@ busco -i "$out/prot_${sp}.fa" \
 busco_summary_dir="busco_summary"
 mkdir -p "$busco_summary_dir"
 busco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
-busco_json_dest="$busco_summary_dir/${species_name}_busco.json"
+busco_json_dest="$busco_summary_dir/${species_name}_${taxonID}_busco.json"
 mv "$busco_json" "$busco_json_dest"
 ln "$busco_json_dest" "$busco_json"   #keep it accessible at the original BUSCO output location too
 echo "[6/6] BUSCO JSON summary collected into $busco_summary_dir/"
@@ -122,8 +122,8 @@ echo "[6/6] BUSCO JSON summary collected into $busco_summary_dir/"
 # IsoQuant GTF uses "transcript", AGAT GFF uses "mRNA" — match both)
 gene_count=$(cut -f3 "$merged" | grep -cxF "gene" || true)
 transcript_count=$(cut -f3 "$merged" | grep -cxE 'transcript|mRNA' || true)
-echo "$gene_count" > "$busco_summary_dir/${species_name}_gc.txt"
-echo "$transcript_count" > "$busco_summary_dir/${species_name}_tc.txt"
+echo "$gene_count" > "$busco_summary_dir/${species_name}_${taxonID}_gc.txt"
+echo "$transcript_count" > "$busco_summary_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
 
 rm -rf agat_log_*
