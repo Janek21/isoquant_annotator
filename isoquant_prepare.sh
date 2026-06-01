@@ -78,6 +78,22 @@ if [ "$srr_count" -eq 0 ]; then
 fi
 echo "Selected $srr_count runs."
 
+#determine which platforms have runs (col9 = Platform in srr_select.tsv)
+#array 0 = PacBio, 1 = Nanopore
+select_tsv="$species_name/srr_select.tsv"
+pacbio_count=$(awk -F'\t' 'tolower($9) ~ /pacbio/' "$select_tsv" | wc -l)
+nanopore_count=$(awk -F'\t' 'tolower($9) ~ /nanopore/ || tolower($9) ~ /ont/' "$select_tsv" | wc -l)
+echo "Platform runs selected -> PacBio: $pacbio_count, Nanopore: $nanopore_count"
+
+iq_tasks=()
+[ "$pacbio_count" -gt 0 ] && iq_tasks+=("0")
+[ "$nanopore_count" -gt 0 ] && iq_tasks+=("1")
+if [ "${#iq_tasks[@]}" -eq 0 ]; then
+	echo "No PacBio or Nanopore runs selected. Nothing to run; exiting."
+	exit 0
+fi
+iq_array=$(IFS=,; echo "${iq_tasks[*]}")   #e.g. "0,1", "0", or "1"
+
 #3. submit the ENA download array (one task per run)
 lyric_dir="$HOME/git/lyric_annotator/$species_name/data/fastq"
 
@@ -109,6 +125,7 @@ else
 fi
 iq_jobid=$(sbatch --parsable \
 	--job-name="isoquant_${sp}" \
+	--array="$iq_array" \
 	"${iq_dep[@]}" \
 	--cpus-per-task=4 \
 	--mem=16G \
