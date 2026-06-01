@@ -81,8 +81,8 @@ echo "Selected $srr_count runs."
 #determine which platforms have runs (col9 = Platform in srr_select.tsv)
 #array 0 = PacBio, 1 = Nanopore
 select_tsv="$species_name/srr_select.tsv"
-pacbio_count=$(awk -F'\t' 'tolower($9) ~ /pacbio/' "$select_tsv" | wc -l)
-nanopore_count=$(awk -F'\t' 'tolower($9) ~ /nanopore/ || tolower($9) ~ /ont/' "$select_tsv" | wc -l)
+pacbio_count=$(cut -f9 "$select_tsv" | grep -ci pacbio || true)
+nanopore_count=$(cut -f9 "$select_tsv" | grep -ciE 'nanopore|ont' || true)
 echo "Platform runs selected -> PacBio: $pacbio_count, Nanopore: $nanopore_count"
 
 iq_tasks=()
