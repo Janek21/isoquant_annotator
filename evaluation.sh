@@ -4,7 +4,7 @@
 #SBATCH --mem=12G
 #SBATCH --time=90
 #SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_j.err
+#SBATCH --error=logs/%x_%j.err
 #
 # Merges the per-platform IsoQuant outputs (pacbio + nanopore) and evaluates
 # the merged annotation with BUSCO.
@@ -100,8 +100,7 @@ if [ -z "$busco_lineage" ]; then
 	exit 1
 fi
 
-busco \
-	-i "$out/prot_${sp}.fa" \
+busco -i "$out/prot_${sp}.fa" \
 	-o "busco_${sp}" \
 	--out_path "$out" \
 	-m protein \
@@ -110,6 +109,16 @@ busco \
 	-c "${SLURM_CPUS_PER_TASK:-8}" \
 	-f
 
+# ── 6. collect the BUSCO JSON summary into a shared folder ─────────
+busco_summary_dir="busco_summary"
+mkdir -p "$busco_summary_dir"
+busco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
+busco_json_dest="$busco_summary_dir/${species_name}.json"
+mv "$busco_json" "$busco_json_dest"
+ln "$busco_json_dest" "$busco_json"   #keep it accessible at the original BUSCO output location too
+echo "[6/6] BUSCO JSON summary collected into $busco_summary_dir/"
+
 rm -rf agat_log_*
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/"
+echo "BUSCO JSON summaries in: $busco_summary_dir/"
