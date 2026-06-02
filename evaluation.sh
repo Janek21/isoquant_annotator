@@ -109,24 +109,30 @@ busco -i "$out/prot_${sp}.fa" \
 	-c "${SLURM_CPUS_PER_TASK:-8}" \
 	-f
 
-# ── 6. collect the BUSCO JSON summary into a shared folder ─────────
-busco_summary_dir="busco_summary"
-mkdir -p "$busco_summary_dir"
+# ── 6. collect results into the shared summary/ tree ──────────────
+summary_dir="summary"
+busco_dir="$summary_dir/busco"
+counts_dir="$summary_dir/counts"
+mkdir -p "$busco_dir" "$counts_dir"
+
+# BUSCO JSON summary
 busco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
-busco_json_dest="$busco_summary_dir/${species_name}_${taxonID}_busco.json"
+busco_json_dest="$busco_dir/${species_name}_${taxonID}_busco.json"
 mv "$busco_json" "$busco_json_dest"
 ln "$busco_json_dest" "$busco_json"   #keep it accessible at the original BUSCO output location too
-echo "[6/6] BUSCO JSON summary collected into $busco_summary_dir/"
+echo "[6/6] BUSCO JSON summary collected into $busco_dir/"
 
 # count gene and transcript models in the prediction (col3 feature type;
 # IsoQuant GTF uses "transcript", AGAT GFF uses "mRNA" — match both)
+# the per-species files below are aggregated later by scripts/make_counts_summary.sh
 gene_count=$(cut -f3 "$merged" | grep -cxF "gene" || true)
 transcript_count=$(cut -f3 "$merged" | grep -cxE 'transcript|mRNA' || true)
-echo "$gene_count" > "$busco_summary_dir/${species_name}_${taxonID}_gc.txt"
-echo "$transcript_count" > "$busco_summary_dir/${species_name}_${taxonID}_tc.txt"
+echo "$gene_count" > "$counts_dir/${species_name}_${taxonID}_gc.txt"
+echo "$transcript_count" > "$counts_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
 
 rm -rf agat_log_*
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/"
-echo "BUSCO JSON summaries in: $busco_summary_dir/"
+echo "Summary outputs in: $summary_dir/ (busco/, counts/)"
+echo "Build the counts table with: bash scripts/make_counts_summary.sh"
