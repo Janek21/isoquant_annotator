@@ -83,7 +83,7 @@ TD2.Predict -t "$out/transcripts_${sp}.fa" -O "$out/td_work"
 mv "./transcripts_${sp}.fa.TD2.pep" "$out/prot_${sp}.fa"
 mv ./*.fa.TD2.* "$out/td_work" 2>/dev/null || true
 
-# ── 5. BUSCO (taxon-driven lineage) ───────────────────────────────
+# ── 5. BUSCO (taxon-driven lineage + Eukaryota) ───────────────────
 # most frequent TaxonID among the selected runs
 taxonID=$(cut -f4 "$species_name/srr_select.tsv" | sort | uniq -c | sort -nr | awk '{print $2}' | head -n1)
 echo "[5/5] TaxonID: $taxonID"
@@ -100,6 +100,9 @@ if [ -z "$busco_lineage" ]; then
 	exit 1
 fi
 
+euk_lineage="eukaryota_odb12"
+
+# taxon-driven lineage run
 busco -i "$out/prot_${sp}.fa" \
 	-o "busco_${sp}" \
 	--out_path "$out" \
@@ -109,18 +112,37 @@ busco -i "$out/prot_${sp}.fa" \
 	-c "${SLURM_CPUS_PER_TASK:-8}" \
 	-f
 
+# Eukaryota run
+echo "      Eukaryota BUSCO lineage: $euk_lineage"
+busco -i "$out/prot_${sp}.fa" \
+	-o "busco_euk_${sp}" \
+	--out_path "$out" \
+	-m protein \
+	-l "$euk_lineage" \
+	--download_path "$busco_db" \
+	-c "${SLURM_CPUS_PER_TASK:-8}" \
+	-f
+
 # ── 6. collect results into the shared summary/ tree ──────────────
 summary_dir="summary"
-busco_dir="$summary_dir/busco"
+busco_lineage_dir="$summary_dir/busco_lineage"
+busco_euk_dir="$summary_dir/busco_eukaryote"
 counts_dir="$summary_dir/counts"
-mkdir -p "$busco_dir" "$counts_dir"
+mkdir -p "$busco_lineage_dir" "$busco_euk_dir" "$counts_dir"
 
-# BUSCO JSON summary
-busco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
-busco_json_dest="$busco_dir/${species_name}_${taxonID}_busco.json"
-mv "$busco_json" "$busco_json_dest"
-ln "$busco_json_dest" "$busco_json"   #keep it accessible at the original BUSCO output location too
-echo "[6/6] BUSCO JSON summary collected into $busco_dir/"
+# taxon-driven lineage BUSCO JSON
+Lbusco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
+Lbusco_dest="$busco_lineage_dir/${species_name}_${taxonID}_Lbusco.json"
+mv "$Lbusco_json" "$Lbusco_dest"
+ln "$Lbusco_dest" "$Lbusco_json"   #keep it accessible at the original BUSCO output location too
+
+# Eukaryota BUSCO JSON
+Ebusco_json="$out/busco_euk_${sp}/short_summary.specific.${euk_lineage}.busco_euk_${sp}.json"
+Ebusco_dest="$busco_euk_dir/${species_name}_${taxonID}_Ebusco.json"
+mv "$Ebusco_json" "$Ebusco_dest"
+ln "$Ebusco_dest" "$Ebusco_json"   #keep it accessible at the original BUSCO output location too
+
+echo "[6/6] BUSCO JSON summaries collected into $busco_lineage_dir/ and $busco_euk_dir/"
 
 # count gene and transcript models in the prediction (col3 feature type;
 # IsoQuant GTF uses "transcript", AGAT GFF uses "mRNA" — match both)
@@ -133,6 +155,6 @@ echo "      Gene models: $gene_count | Transcript models: $transcript_count"
 
 rm -rf agat_log_*
 echo "Done. Merged annotation: $merged"
-echo "BUSCO results in: $out/busco_${sp}/"
-echo "Summary outputs in: $summary_dir/ (busco/, counts/)"
-echo "Build the counts table with: bash scripts/make_counts_summary.sh"
+echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
+echo "Summary outputs in: $summary_dir/ (busco_lineage/, busco_eukaryote/, counts/)"
+echo "Build the summary tables with: python3 scripts/make_summary.py"
