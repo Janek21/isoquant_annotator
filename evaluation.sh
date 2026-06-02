@@ -157,4 +157,4 @@ rm -rf agat_log_*
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
 echo "Summary outputs in: $summary_dir/ (busco_lineage/, busco_eukaryote/, counts/)"
-echo "Build the summary tables with: python3 scripts/make_summary.py"
+echo "Build the summary tables with: python3 scripts/make_summary_tables.py"

@@ -9,49 +9,50 @@ Reads the shared summary/ tree:
 
 Writes three TSVs into the summary directory:
   1. counts_summary.tsv   gene_count, transcripts_count
-  2. busco_summary.tsv     lineage_busco, eukaryote_busco, lineage_used  (Completeness % only)
+  2. busco_summary.tsv     lineage_busco, eukaryote_busco, lineage_used  (Completeness only)
   3. general_summary.tsv   the first two tables merged on the species column
 
 Run manually once all evaluation jobs have finished:
-  python3 scripts/make_summary.py [summary_dir]
+  python3 scripts/make_summary_tables.py [summary_dir]
 """
-import csv
 import glob
 import json
 import os
 import re
 import sys
 
+import pandas as pd
+
 
 def read_count(path):
-    """Return the integer string stored in a count file, or 'NA' if absent."""
+    """Return the integer string stored in a count file, or None if absent."""
     try:
         with open(path) as fh:
-            return fh.read().strip() or "NA"
+            return fh.read().strip() or None
     except FileNotFoundError:
-        return "NA"
+        return None
 
 
 def busco_fields(path):
     """Return (completeness_C, lineage_name) from a BUSCO short_summary JSON.
 
     Only the Completeness score is kept from the one-line summary, e.g.
-    'C:60.8%[S:40.2%,D:20.6%],F:9.1%,M:30.2%,n:1591' -> '60.8%'.
+    'C:60.8%[S:40.2%,D:20.6%],F:9.1%,M:30.2%,n:1591' -> '60.8'.
     """
     try:
         with open(path) as fh:
             data = json.load(fh)
     except (FileNotFoundError, json.JSONDecodeError):
-        return "NA", "NA"
+        return None, None
     results = data.get("results", {})
-    match = re.search(r"C:([\d.]+%)", results.get("one_line_summary", "") or "")
+    match = re.search(r"C:([\d.]+)%", results.get("one_line_summary", "") or "")
     if match:
         completeness = match.group(1)
     else:
         complete = results.get("Complete percentage")
-        completeness = f"{complete}%" if complete is not None else "NA"
-    lineage = data.get("lineage_dataset", {}).get("name", "NA")
-    return completeness, str(lineage).strip()
+        completeness = str(complete) if complete is not None else None
+    lineage = data.get("lineage_dataset", {}).get("name")
+    return completeness, lineage
 
 
 def species_keys(directory, suffix):
@@ -60,22 +61,6 @@ def species_keys(directory, suffix):
     for path in glob.glob(os.path.join(directory, "*" + suffix)):
         keys.add(os.path.basename(path)[: -len(suffix)])
     return keys
-
-
-def write_tsv(path, header, rows):
-    with open(path, "w", newline="") as fh:
-        writer = csv.writer(fh, delimiter="\t")
-        writer.writerow(header)
-        writer.writerows(rows)
-
-
-def read_tsv(path):
-    """Return (header, {species: row}) for a TSV keyed on its first column."""
-    with open(path, newline="") as fh:
-        reader = csv.reader(fh, delimiter="\t")
-        header = next(reader)
-        rows = {row[0]: row for row in reader if row}
-    return header, rows
 
 
 def main():
@@ -94,7 +79,7 @@ def main():
         print(f"No result files found under {summary_dir}/. Nothing to do.")
         return
 
-    counts_rows, busco_rows = [], []
+    counts_records, busco_records = [], []
     for sp in species:
         gene_count = read_count(os.path.join(counts_dir, f"{sp}_gc.txt"))
         transcripts_count = read_count(os.path.join(counts_dir, f"{sp}_tc.txt"))
@@ -103,28 +88,34 @@ def main():
         eukaryote_busco, _ = busco_fields(
             os.path.join(euk_dir, f"{sp}_Ebusco.json"))
 
-        counts_rows.append([sp, gene_count, transcripts_count])
-        busco_rows.append([sp, lineage_busco, eukaryote_busco, lineage_used])
+        counts_records.append({
+            "species": sp,
+            "gene_count": gene_count,
+            "transcripts_count": transcripts_count,
+        })
+        busco_records.append({
+            "species": sp,
+            "lineage_busco": lineage_busco,
+            "eukaryote_busco": eukaryote_busco,
+            "lineage_used": lineage_used,
+        })
+
+    counts_df = pd.DataFrame(
+        counts_records, columns=["species", "gene_count", "transcripts_count"])
+    busco_df = pd.DataFrame(
+        busco_records,
+        columns=["species", "lineage_busco", "eukaryote_busco", "lineage_used"])
+
+    # third table: merge the two tables on the species column
+    general_df = counts_df.merge(busco_df, on="species", how="outer")
 
     counts_path = os.path.join(summary_dir, "counts_summary.tsv")
     busco_path = os.path.join(summary_dir, "busco_summary.tsv")
     general_path = os.path.join(summary_dir, "general_summary.tsv")
 
-    write_tsv(counts_path,
-              ["species", "gene_count", "transcripts_count"], counts_rows)
-    write_tsv(busco_path,
-              ["species", "lineage_busco", "eukaryote_busco", "lineage_used"], busco_rows)
-
-    # third table: merge the two tables just written, on the species column
-    counts_header, counts_data = read_tsv(counts_path)
-    busco_header, busco_data = read_tsv(busco_path)
-    general_header = counts_header + busco_header[1:]   # drop the duplicate 'species'
-    general_rows = []
-    for sp in sorted(set(counts_data) | set(busco_data)):
-        crow = counts_data.get(sp, [sp] + ["NA"] * (len(counts_header) - 1))
-        brow = busco_data.get(sp, [sp] + ["NA"] * (len(busco_header) - 1))
-        general_rows.append(crow + brow[1:])
-    write_tsv(general_path, general_header, general_rows)
+    counts_df.to_csv(counts_path, sep="\t", index=False, na_rep="NA")
+    busco_df.to_csv(busco_path, sep="\t", index=False, na_rep="NA")
+    general_df.to_csv(general_path, sep="\t", index=False, na_rep="NA")
 
     print(f"Wrote 3 tables for {len(species)} species to {summary_dir}/:")
     print("  counts_summary.tsv, busco_summary.tsv, general_summary.tsv")
