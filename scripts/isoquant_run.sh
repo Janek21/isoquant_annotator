@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#SBATCH --output=logs/%x.%A_%a.out
-#SBATCH --error=logs/%x.%A_%a.err
+#SBATCH --output=logs/run/%x.%A_%a.out
+#SBATCH --error=logs/run/%x.%A_%a.err
 #SBATCH --job-name=isoquant
 #SBATCH --qos=normal
 #SBATCH --time=260
@@ -65,7 +65,7 @@ if [ -z "$reference" ]; then
 fi
 
 echo "Running IsoQuant ($TARGET_PLATFORM) ..."
-isoquant.py -t "$SLURM_CPUS_PER_TASK" \
+isoquant --threads "$SLURM_CPUS_PER_TASK" \
 	--reference "$reference" \
 	$genedb_arg \
 	$FASTQ_ARGS \

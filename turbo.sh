@@ -13,7 +13,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 
-#SBATCH --array=0-59%10
+#SBATCH --array=0-57%10
 	#arrays by 10 to avoid many species in evaluation at he same time(get_busco_db.py entrez requests)
 #start
 start_time=$(date +%s)
