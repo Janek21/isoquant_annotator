@@ -74,14 +74,13 @@ if [ -z "$search_res" ]; then
 fi
 echo "$search_res" > "$species_name/full_srr.tsv"
 
-python3 "$scripts_dir/select_accessions.py" -i "$species_name/full_srr.tsv" -o "$species_name/srr_select.tsv" -s "$species_name/srr_list.tsv" -t 15 -m 8
+python3 "$scripts_dir/select_accessions.py" -i "$species_name/full_srr.tsv" -o "$species_name/srr_select.tsv" -s "$species_name/srr_list.tsv" -e error_species.txt -t 15 -m 8
 
-#if nothing survived the filtering, record the failure, clean up and abort this species
-srr_count=$(wc -l < "$species_name/srr_select.tsv")
-if [ "$srr_count" -eq 0 ]; then
-	had_count=$(grep -c . "$species_name/full_srr.tsv" 2>/dev/null || echo 0)
-	printf '%s\t%s\n' "$species_name" "$had_count" >> error_species.txt
-	echo "No SRA selected for $species_name (original: $had_count); logged to error_species.txt. Removing $species_name and aborting."
+#if nothing survived the filtering (file missing or empty), clean up and abort this species 
+#[Species, SRA, size] rows are logged to error_species.txt by select_accessions.py
+srr_count=$(wc -l < "$species_name/srr_select.tsv" 2>/dev/null || echo 0)
+if [ ! -s "$species_name/srr_select.tsv" ]; then
+	echo "No SRA selected for $species_name; logged to error_species.txt. Removing $species_name and aborting."
 	rm -rf "$species_name"
 	exit 1
 fi

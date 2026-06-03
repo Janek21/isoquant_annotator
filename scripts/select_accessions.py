@@ -66,19 +66,41 @@ def get_size_gb(run_id, timeout=20):
     return None
 
 
-def select(df, top_reads, max_gb):
+def log_no_sra(species_label, candidates, error_file):
+    """Append [Species, SRA, size] rows to the error file when no runs survive the filters."""
+    with open(error_file, "a") as fh:
+        if candidates.empty:
+            fh.write(f"{species_label}\tNA\tNA\n")
+            return
+        for _, row in candidates.iterrows():
+            size_str = f"{row['Size_GB']:.2f}" if pd.notna(row["Size_GB"]) else "NA"
+            fh.write(f"{row['Species']}\t{row['SRA_id']}\t{size_str}\n")
+
+
+def select(df, top_reads, max_gb, error_file=None):
+    # species label for error logging, captured before any filtering can empty the frame
+    species_label = str(df["Species"].iloc[0]) if not df.empty else "Unknown"
+
     # bulk transcriptomic only
     df = df[df["Source"].str.contains("TRANSCRIPTOMIC", case=False, na=False)].reset_index(drop=True)
+    if df.empty:
+        print("No TRANSCRIPTOMIC runs found.")
+        if error_file:
+            log_no_sra(species_label, pd.DataFrame(columns=["Species", "SRA_id", "Size_GB"]), error_file)
+        return df
 
     # SRA_id column is "ExperimentID:RunID" – keep only the run ID
     df[["Exp_id", "SRA_id"]] = df["SRA_id"].str.split(":", n=1, expand=True)
 
     # size filter (one lightweight ENA call per candidate)
     print(f"Checking sizes for {len(df)} candidate runs (cap: {max_gb} GB) ...")
-    sizes = df["SRA_id"].apply(get_size_gb)
-    df = df[sizes.notna() & (sizes <= max_gb)].reset_index(drop=True)
+    df["Size_GB"] = df["SRA_id"].apply(get_size_gb)
+    candidates = df[["Species", "SRA_id", "Size_GB"]].copy()  # keep for error logging
+    df = df[df["Size_GB"].notna() & (df["Size_GB"] <= max_gb)].reset_index(drop=True)
     print(f"Runs remaining after size filter: {len(df)}")
     if df.empty:
+        if error_file:
+            log_no_sra(species_label, candidates, error_file)
         return df
 
     keywords = get_species_keywords(df["Species"].iloc[0])
@@ -97,12 +119,13 @@ def main():
     p.add_argument("-s", "--srr_list", required=True, help="Plain accession list for the downloader (srr_list.tsv).")
     p.add_argument("-t", "--topReads", type=int,   default=2,    help="Top runs per platform × stage (default 2).")
     p.add_argument("-m", "--max_size", type=float, default=9e15, help="Max run size in GB (default: no limit).")
+    p.add_argument("-e", "--error_file", help="Append [Species, SRA, size] rows here when no runs pass the filters.")
     args = p.parse_args()
 
     colnames = ["SRA_id", "Description", "TaxonID", "Lineage", "Species","Source", "Strategy", "Platform", "Read_count", "Date"]
     data = pd.read_csv(args.input, sep="\t", header=None, names=colnames)
 
-    best = select(data, args.topReads, args.max_size)
+    best = select(data, args.topReads, args.max_size, error_file=args.error_file)
     if best.empty:
         print("No runs selected.")
         open(args.output, "w").close()
