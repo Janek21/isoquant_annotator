@@ -14,8 +14,8 @@ set -euo pipefail
 species_name="$1"
 busco_db="${2:-/no_backup/rg/references/busco_downloads}"
 
-# location of get_busco_db.py (from the LyRic repo) and an NCBI Entrez email
-ncbi_email="${NCBI_EMAIL:-your_email@example.com}"
+#NCBI Entrez email
+ncbi_email="${NCBI_EMAIL:-nqvsisnkflvflitqoy@kjkpc.net}"
 
 sp=$(echo "$species_name" | cut -f2 -d"_")
 genome=$(ls "$species_name"/data/fasta/*.fa* 2>/dev/null | grep -vE '\.fai$' | head -1)

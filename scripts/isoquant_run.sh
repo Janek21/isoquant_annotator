@@ -12,6 +12,7 @@
 ##array: task 0 = PacBio, task 1 = Nanopore
 #SBATCH --array=0-1
 
+start_time=$(date +%s)
 echo ">STARTING at $(date)"
 
 source $(conda info --base)/etc/profile.d/conda.sh
@@ -79,4 +80,6 @@ if [ -f "/sys/fs/cgroup$cgroup_dir/memory.peak" ]; then
 	echo ">Peak memory was $peak_mem_mb MegaBytes"
 fi
 
+elapsed_time=$(( $(date +%s) - start_time ))
+echo "It takes $((elapsed_time / 60)) minutes"
 echo ">ENDING at $(date)"
