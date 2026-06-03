@@ -105,6 +105,8 @@ def main():
     best = select(data, args.topReads, args.max_size)
     if best.empty:
         print("No runs selected.")
+        open(args.output, "w").close()
+        open(args.srr_list, "w").close()
         return
 
     out_cols = ["SRA_id", "Description", "Tissue_stage", "TaxonID", "Lineage", "Species", "Source", "Strategy", "Platform", "Read_count", "Date"]
