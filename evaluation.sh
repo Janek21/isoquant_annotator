@@ -25,9 +25,9 @@ mkdir -p "$out" logs
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate buscomania
 
-#per-task AGAT config so parallel jobs don't collide on agat_config.yaml
-agat_cfg="$out/agat_${sp}_${SLURM_ARRAY_TASK_ID:-$$}.yaml"
-agat config --expose --output "$agat_cfg" >/dev/null 2>&1
+#AGAT config so parallel jobs don't collide --no-log so AGAT never creates agat_log_*
+agat_cfg="$out/agat_${species_name}_${SLURM_ARRAY_TASK_ID:-$$}.yaml"
+agat config --expose --no-log --output "$agat_cfg" >/dev/null 2>&1
 trap 'rm -f "$agat_cfg"' EXIT
 
 echo "════════════════════════════════════════"
@@ -96,10 +96,19 @@ echo "    Translation table for $taxonID: $gcode"
 
 # ── 4. ORF prediction with TransDecoder ───────────────────────────
 echo "[4/5] Predicting ORFs (TransDecoder, genetic code $gcode) ..."
-TD2.LongOrfs -t "$out/transcripts_${sp}.fa" -O "$out/td_work" -G "$gcode"
-TD2.Predict -t "$out/transcripts_${sp}.fa" -O "$out/td_work" -G "$gcode"
-mv "./transcripts_${sp}.fa.TD2.pep" "$out/prot_${sp}.fa"
-mv ./*.fa.TD2.* "$out/td_work" 2>/dev/null || true
+#ensure files are generated in particular folders(no naming clash)
+td_work="$out/td_work"
+mkdir -p "$td_work"
+transcripts_abs="$(realpath "$out/transcripts_${sp}.fa")"   #transcriptome built in step 3
+
+(cd "$td_work" && #move to folder for TD2 execution ONLY
+	#Find ORFs in transcripts
+	TD2.LongOrfs -t "$transcripts_abs" -O . -G "$gcode"
+	#Select most probable ORFs to create proteins
+	TD2.Predict -t "$transcripts_abs" -O . -G "$gcode" #-O is output of ORFs
+)
+#move TD2 prot files to correct folders
+mv "$td_work/transcripts_${sp}.fa.TD2.pep" "$out/prot_${sp}.fa"
 
 # ── 5. BUSCO (taxon-driven lineage + Eukaryota) ───────────────────
 echo "[5/5] BUSCO (TaxonID: $taxonID)"
@@ -169,7 +178,6 @@ echo "$gene_count" > "$counts_dir/${species_name}_${taxonID}_gc.txt"
 echo "$transcript_count" > "$counts_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
 
-rm -rf agat_log_*
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
 echo "Summary outputs in: $summary_dir/ (busco_lineage/, busco_eukaryote/, counts/)"
