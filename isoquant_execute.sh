@@ -43,7 +43,7 @@ genedb_arg="--genedb $species_name/data/input/clean_annotation.fixed.gtf"
 
 #per-task AGAT config so parallel species launches don't collide on agat_config.yaml
 agat_cfg="$species_name/agat_${sp}_$$.yaml"
-agat config --expose --output "$agat_cfg" >/dev/null 2>&1
+agat config --expose --no-log --output "$agat_cfg" >/dev/null 2>&1
 trap 'rm -f "$agat_cfg"' EXIT
 
 plain_annotation=$(find ../data/species/"$species_name"*/GC* -type f \( -name "*GC*.gff" -o -name "*GC*.gff3" \))
