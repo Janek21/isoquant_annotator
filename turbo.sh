@@ -13,13 +13,13 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 
-#SBATCH --array=0-59%4
-
+#SBATCH --array=0-59%10
+	#arrays by 10 to avoid many species in evaluation at he same time(get_busco_db.py entrez requests)
 #start
 start_time=$(date +%s)
 echo ">STARTING at $(date)"
 
-allSpecies="$1"
+allSpecies="$1" #list of species names(not taxid) as they appear in the folder
 
 #How many lines to process per array task
 LINES_PER_TASK=1
@@ -39,7 +39,7 @@ echo "Species is $selected_specie"
 #export other can read
 export SLURM_CPUS_PER_TASK
 
-bash isoquant_prepare.sh $selected_specie
+bash isoquant_execute.sh $selected_specie
 
 # Record memory usage (at the end of all 4 downloads)
 cgroup_dir=$(awk -F: '{print $NF}' /proc/self/cgroup)
