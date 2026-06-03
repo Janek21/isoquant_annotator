@@ -25,6 +25,11 @@ mkdir -p "$out" logs
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate buscomania
 
+#per-task AGAT config so parallel jobs don't collide on agat_config.yaml
+agat_cfg="$out/agat_${sp}_${SLURM_ARRAY_TASK_ID:-$$}.yaml"
+agat config --expose --output "$agat_cfg" >/dev/null 2>&1
+trap 'rm -f "$agat_cfg"' EXIT
+
 echo "════════════════════════════════════════"
 echo " IsoQuant evaluation: $species_name"
 echo " genome : $genome"
@@ -51,13 +56,13 @@ else
 	merged="$out/merged_${sp}.gff"
 	merge_args=()
 	for g in "${gtfs[@]}"; do merge_args+=(--gff "$g"); done
-	agat_sp_merge_annotations.pl "${merge_args[@]}" --out "$merged"
+	agat_sp_merge_annotations.pl "${merge_args[@]}" --config "$agat_cfg" --out "$merged"
 fi
 echo "    Annotation to evaluate: $merged"
 
 # ── 2. longest isoform per gene ───────────────────────────────────
 echo "[2/5] Extracting longest isoforms ..."
-agat_sp_keep_longest_isoform.pl --gff "$merged" --out "$out/longest_${sp}.gtf"
+agat_sp_keep_longest_isoform.pl --gff "$merged" --config "$agat_cfg" --out "$out/longest_${sp}.gtf"
 
 # ── 3. transcriptome with gffread ─────────────────────────────────
 echo "[3/5] Building transcriptome ..."
@@ -76,17 +81,28 @@ if [[ "$genome" == *.gz ]]; then
 	rm -f "$genome_plain"
 fi
 
+# most frequent TaxonID among the selected runs (drives genetic code + BUSCO lineage)
+taxonID=$(cut -f4 "$species_name/srr_select.tsv" | sort | uniq -c | sort -nr | awk '{print $2}' | head -n1)
+echo "    TaxonID: $taxonID"
+
+#resolve the correct NCBI translation table for this taxon.
+#AGAT to use the right table
+gcode=$(python3 "scripts/get_genetic_code.py" -e "$ncbi_email" -k "${NCBI_API_KEY:-}" -t "$taxonID" 2>/dev/null)
+if ! [[ "$gcode" =~ ^[0-9]+$ ]]; then
+	echo "    Could not resolve genetic code for taxon $taxonID; defaulting to table 1."
+	gcode=1
+fi
+echo "    Translation table for $taxonID: $gcode"
+
 # ── 4. ORF prediction with TransDecoder ───────────────────────────
-echo "[4/5] Predicting ORFs (TransDecoder) ..."
-TD2.LongOrfs -t "$out/transcripts_${sp}.fa" -O "$out/td_work"
-TD2.Predict -t "$out/transcripts_${sp}.fa" -O "$out/td_work"
+echo "[4/5] Predicting ORFs (TransDecoder, genetic code $gcode) ..."
+TD2.LongOrfs -t "$out/transcripts_${sp}.fa" -O "$out/td_work" -G "$gcode"
+TD2.Predict -t "$out/transcripts_${sp}.fa" -O "$out/td_work" -G "$gcode"
 mv "./transcripts_${sp}.fa.TD2.pep" "$out/prot_${sp}.fa"
 mv ./*.fa.TD2.* "$out/td_work" 2>/dev/null || true
 
 # ── 5. BUSCO (taxon-driven lineage + Eukaryota) ───────────────────
-# most frequent TaxonID among the selected runs
-taxonID=$(cut -f4 "$species_name/srr_select.tsv" | sort | uniq -c | sort -nr | awk '{print $2}' | head -n1)
-echo "[5/5] TaxonID: $taxonID"
+echo "[5/5] BUSCO (TaxonID: $taxonID)"
 
 busco_lineage=$(python3 "scripts/get_busco_db.py" \
 	-e "$ncbi_email" \

@@ -41,18 +41,23 @@ function gtf_fix() { #gff to gtf conversion
 #define the reference database argument for IsoQuant (overwriten if no annot)
 genedb_arg="--genedb $species_name/data/input/clean_annotation.fixed.gtf"
 
+#per-task AGAT config so parallel species launches don't collide on agat_config.yaml
+agat_cfg="$species_name/agat_${sp}_$$.yaml"
+agat config --expose --output "$agat_cfg" >/dev/null 2>&1
+trap 'rm -f "$agat_cfg"' EXIT
+
 plain_annotation=$(find ../data/species/"$species_name"*/GC* -type f \( -name "*GC*.gff" -o -name "*GC*.gff3" \))
 gzipped_annotation=$(find ../data/species/"$species_name"*/GC* -type f \( -name "*GC*.gff.gz" -o -name "*GC*.gff3.gz" \))
 if [ -n "$plain_annotation" ]; then
 	echo "GFF uncompressed to GTF"
 	#copy regular annotation to species data folder
-	agat_convert_sp_gff2gtf.pl --gff "$plain_annotation" -o "$species_name/data/input/clean_annotation.gtf"
+	agat_convert_sp_gff2gtf.pl --gff "$plain_annotation" --config "$agat_cfg" -o "$species_name/data/input/clean_annotation.gtf"
 	gtf_fix
 elif [ -n "$gzipped_annotation" ]; then
 	echo "GFF compressed to GTF"
 	#uncompress to a real file first (AGAT --gff cannot read from stdin), then convert
 	unpigz -c "$gzipped_annotation" > "$species_name/data/input/raw_annotation.gff"
-	agat_convert_sp_gff2gtf.pl --gff "$species_name/data/input/raw_annotation.gff" -o "$species_name/data/input/clean_annotation.gtf"
+	agat_convert_sp_gff2gtf.pl --gff "$species_name/data/input/raw_annotation.gff" --config "$agat_cfg" -o "$species_name/data/input/clean_annotation.gtf"
 	gtf_fix
 	rm -f "$species_name/data/input/raw_annotation.gff"
 else #no annotation
