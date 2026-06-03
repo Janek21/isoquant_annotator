@@ -3,8 +3,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=12G
 #SBATCH --time=90
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --output=logs/eval/%x_%j.out
+#SBATCH --error=logs/eval/%x_%j.err
 #
 # Merges the per-platform IsoQuant outputs (pacbio + nanopore) and evaluates
 # the merged annotation with BUSCO.
@@ -97,15 +97,15 @@ echo "    Translation table for $taxonID: $gcode"
 # ── 4. ORF prediction with TransDecoder ───────────────────────────
 echo "[4/5] Predicting ORFs (TransDecoder, genetic code $gcode) ..."
 #ensure files are generated in particular folders(no naming clash)
-td_work="$out/td_work"
+td_work="$(realpath "$out/td_work")"
 mkdir -p "$td_work"
 transcripts_abs="$(realpath "$out/transcripts_${sp}.fa")"   #transcriptome built in step 3
 
 (cd "$td_work" && #move to folder for TD2 execution ONLY
 	#Find ORFs in transcripts
-	TD2.LongOrfs -t "$transcripts_abs" -O . -G "$gcode"
+	TD2.LongOrfs -t "$transcripts_abs" -O $td_work -G "$gcode"
 	#Select most probable ORFs to create proteins
-	TD2.Predict -t "$transcripts_abs" -O . -G "$gcode" #-O is output of ORFs
+	TD2.Predict -t "$transcripts_abs" -O $td_work -G "$gcode" -v #-O is output of ORFs
 )
 #move TD2 prot files to correct folders
 mv "$td_work/transcripts_${sp}.fa.TD2.pep" "$out/prot_${sp}.fa"
