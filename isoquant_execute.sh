@@ -135,9 +135,9 @@ iq_jobid=$(sbatch --parsable \
 	--job-name="isoquant_${sp}" \
 	--array="$iq_array" \
 	"${iq_dep[@]}" \
-	--cpus-per-task=4 \
-	--mem=16G \
-	--time=260 \
+	--cpus-per-task=6 \
+	--mem=30G \
+	--time=280 \
 	"$scripts_dir/isoquant_run.sh" "$species_name" "$genedb_arg")
 echo "IsoQuant submitted: job $iq_jobid${dl_jobid:+ (starts after job $dl_jobid)}" #only 2nd part if it waits for dependency
 
