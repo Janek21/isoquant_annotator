@@ -52,7 +52,7 @@ if [ -z "$FTP_URL" ]; then
 	exit 1
 fi
 
-wget -q -O "$OUT" "ftp://${FTP_URL}"
+wget -q --tries=5 --timeout=120 -O "$OUT" "https://${FTP_URL}"
 echo "Done: $OUT"
 
 # Peak memory
