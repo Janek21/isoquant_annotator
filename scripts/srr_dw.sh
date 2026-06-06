@@ -20,49 +20,54 @@ echo ">STARTING at $(date)"
 
 set -euo pipefail
 
-SPECIES="$1"
-FASTQ_DIR="${SPECIES}/data/fastq"
-SRR_LIST="${SPECIES}/srr_list.tsv"
+species_name="$1"
 
-mkdir -p "$FASTQ_DIR"
+out_dir="$species_name/data/fastq"
+mkdir -p "$out_dir"
 
-#accession for this array task
-ACCESSION=$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$SRR_LIST")
+# accession for this array task (line SLURM_ARRAY_TASK_ID + 1)
+accession=$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$species_name/srr_list.tsv")
 
-if [ -z "$ACCESSION" ]; then
-	echo "ERROR: no accession at index $SLURM_ARRAY_TASK_ID in $SRR_LIST"
+if [ -z "$accession" ]; then
+	echo "ERROR: no accession at index $SLURM_ARRAY_TASK_ID in $species_name/srr_list.tsv"
 	exit 1
 fi
 
-OUT="${FASTQ_DIR}/${ACCESSION}.fastq.gz"
+result_file="$out_dir/$accession.fastq.gz"
 
-if [ -s "$OUT" ]; then
-	echo "Already exists: $OUT"
-	exit 0
+if [ -s "$result_file" ]; then #check if file has already been downloaded
+	echo "Skipping $accession: $result_file already exists."
+else
+	echo "--- Processing $accession ---"
+
+	#Resolve the FASTQ URL from ENA (returns paths without a scheme prefix)
+	ftp_url=$(curl -sf "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=${accession}&result=read_run&fields=fastq_ftp" | tail -n +2 | cut -f2 | tr ';' '\n' | head -1)
+
+	if [ -z "$ftp_url" ]; then
+		echo "Error: could not retrieve FTP URL for $accession from ENA."
+		exit 1
+	fi
+
+	#Download to a temp file first (avoids leaving a partial file that the skip-check above would mistake for a finished download)
+	tmp_file="$out_dir/$accession.fastq.gz.part"
+	wget -q --tries=5 --waitretry=60 --random-wait --timeout=120 -O "$tmp_file" "https://${ftp_url}"
+
+	#Validate gzip integrity so a truncated download fails loudly here instead of leaving a corrupt result file behind.
+	zcat "$tmp_file" > /dev/null
+	mv "$tmp_file" "$result_file"
+	echo "Complete: new file is $result_file"
 fi
 
-echo "Downloading $ACCESSION"
-
-#ENA for the FTP URL at runtime (ENA returns paths without ftp:// prefix)
-FTP_URL=$(curl -sf "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=${ACCESSION}&result=read_run&fields=fastq_ftp" \
-	| tail -n +2 | cut -f2 | tr ';' '\n' | head -1)
-
-if [ -z "$FTP_URL" ]; then
-	echo "ERROR: could not retrieve FTP URL for $ACCESSION from ENA"
-	exit 1
-fi
-
-wget -q --tries=5 --waitretry=60 --random-wait --timeout=120 -O "$OUT" "https://${FTP_URL}"
-echo "Done: $OUT"
-
-# Peak memory
+# Record memory usage at the end
 cgroup_dir=$(awk -F: '{print $NF}' /proc/self/cgroup)
+# Check if the path exists to avoid errors on different cgroup versions
 if [ -f "/sys/fs/cgroup$cgroup_dir/memory.peak" ]; then
 	peak_mem=$(cat "/sys/fs/cgroup$cgroup_dir/memory.peak")
 	peak_mem_mb=$(awk "BEGIN {printf \"%.2f\", $peak_mem / 1048576}")
 	echo ">Peak memory was $peak_mem_mb MegaBytes"
 fi
 
+# Record end
 elapsed_time=$(( $(date +%s) - start_time ))
 echo "It takes $((elapsed_time / 60)) minutes"
 echo ">ENDING at $(date)"
