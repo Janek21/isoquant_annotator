@@ -36,7 +36,7 @@ fi
 
 OUT="${FASTQ_DIR}/${ACCESSION}.fastq.gz"
 
-if [ -f "$OUT" ]; then
+if [ -s "$OUT" ]; then
 	echo "Already exists: $OUT"
 	exit 0
 fi
@@ -52,7 +52,7 @@ if [ -z "$FTP_URL" ]; then
 	exit 1
 fi
 
-wget -q --tries=5 --timeout=120 -O "$OUT" "https://${FTP_URL}"
+wget -q --tries=5 --waitretry=60 --random-wait --timeout=120 -O "$OUT" "https://${FTP_URL}"
 echo "Done: $OUT"
 
 # Peak memory

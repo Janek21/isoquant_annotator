@@ -115,8 +115,11 @@ if [ -d "$lyric_dir" ];then
 
 else #if no data from lyric
 	dl_jobid=$(sbatch --parsable \
-		--job-name="ena_download_${sp}" \
-		--array=0-$(( srr_count - 1 )) \
+		--job-name="ena_download" \
+		--dependency=singleton \
+		--output="logs/ena_download_${sp}.%A_%a.out" \
+		--error="logs/ena_download_${sp}.%A_%a.err" \
+		--array=0-$(( srr_count - 1 ))%5 \
 		--cpus-per-task=2 \
 		--mem=4G \
 		--time=90 \
