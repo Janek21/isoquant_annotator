@@ -8,6 +8,9 @@ master_tsv="${2:-../data/longread_protists.tsv}"
 busco_db="${3:-}"   # forwarded to evaluation.sh (empty = use its default)
 scripts_dir="scripts"
 
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate buscomania
+
 sp=$(echo "$species_name" | cut -f2 -d"_")
 sp_extra=$(echo "$species_name" | cut -f3 -d"_")
 data="$species_name/data"
@@ -35,6 +38,20 @@ function gtf_fix() { #gff to gtf conversion
 	awk '$3 != "region"' "$species_name/data/input/clean_annotation.gtf" > "$species_name/data/input/clean_annotation.tmp.gtf"
 	gffread "$species_name/data/input/clean_annotation.tmp.gtf" -T -o "$species_name/data/input/clean_annotation.fixed.gtf"
 	rm -f "$species_name/data/input/clean_annotation.tmp.gtf"
+	# solve duplicated transcripts(gives subID) 
+	awk -F'\t' 'BEGIN{OFS="\t"}
+	/^#/ {print; next}
+	{
+		key="transcript_id \""; i=index($9, key)
+		if (i==0) { next }                       # drop gene (and any id-less) lines
+		rest=substr($9, i+length(key)); j=index(rest, "\"")
+		tid=substr(rest, 1, j-1)
+		if ($3=="transcript" || tid != prev) { seen[tid]++; cur=(seen[tid]>1)?tid"."seen[tid]:tid; prev=tid }
+		if ($3=="transcript") { next }           # boundary read above; do not emit the line
+		$9=substr($9,1,i-1) key cur substr(rest, j)
+		print
+	}' "$species_name/data/input/clean_annotation.fixed.gtf" > "$species_name/data/input/clean_annotation.dedup.gtf"
+	mv "$species_name/data/input/clean_annotation.dedup.gtf" "$species_name/data/input/clean_annotation.fixed.gtf"
 	echo "GFF to GTF successful"
 }
 	

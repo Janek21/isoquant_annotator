@@ -71,6 +71,7 @@ isoquant --threads "$SLURM_CPUS_PER_TASK" \
 	$FASTQ_ARGS \
 	--data_type "$ISOQUANT_TYPE" \
 	-o "$species_name/output/$OUT_DIR"
+iq_status=$?
 
 #peak mem
 cgroup_dir=$(awk -F: '{print $NF}' /proc/self/cgroup)
@@ -82,4 +83,13 @@ fi
 
 elapsed_time=$(( $(date +%s) - start_time ))
 echo "It takes $((elapsed_time / 60)) minutes"
+
+#if transcript_models.gtf are empty, output error
+models=$(find "$species_name/output/$OUT_DIR" -name "*transcript_models.gtf" -size +0c 2>/dev/null | head -1 || true)
+if [ "$iq_status" -ne 0 ] || [ -z "$models" ]; then
+	echo "ERROR: IsoQuant failed for $species_name ($TARGET_PLATFORM): exit=$iq_status, models=${models:-none}"
+	echo ">ENDING at $(date)"
+	exit 1
+fi
+
 echo ">ENDING at $(date)"
