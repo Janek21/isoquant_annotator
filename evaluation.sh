@@ -11,6 +11,8 @@
 # Usage: sbatch evaluation.sh <species_name> [busco_db]
 set -euo pipefail
 
+echo ">STARTING at $(date)"
+
 species_name="$1"
 busco_db="${2:-/no_backup/rg/references/busco_downloads}"
 
@@ -18,7 +20,7 @@ busco_db="${2:-/no_backup/rg/references/busco_downloads}"
 ncbi_email="${NCBI_EMAIL:-nqvsisnkflvflitqoy@kjkpc.net}"
 
 sp=$(echo "$species_name" | cut -f2 -d"_")
-genome=$(ls "$species_name"/data/fasta/*.fa* 2>/dev/null | grep -vE '\.fai$' | head -1)
+genome=$(ls "$species_name"/data/fasta/*.fa* 2>/dev/null | grep -vE '\.fai$')
 out="$species_name/output/eval"
 mkdir -p "$out" logs
 
@@ -49,8 +51,9 @@ if [ "${#gtfs[@]}" -eq 0 ]; then
 	echo "ERROR: no transcript_models.gtf under output/pacbio or output/nanopore"
 	exit 1
 elif [ "${#gtfs[@]}" -eq 1 ]; then
-	echo "[1/5] Single platform; no merge needed."
-	merged="${gtfs[0]}"
+	echo "[1/5] Single platform; converting GTF to GFF3 ..."
+	merged="$out/merged_${sp}.gff"
+	agat_convert_sp_gxf2gxf.pl -g "${gtfs[0]}" --config "$agat_cfg" -o "$merged"
 else
 	echo "[1/5] Merging ${#gtfs[@]} platforms with AGAT ..."
 	merged="$out/merged_${sp}.gff"
@@ -153,7 +156,8 @@ summary_dir="summary"
 busco_lineage_dir="$summary_dir/busco_lineage"
 busco_euk_dir="$summary_dir/busco_eukaryote"
 counts_dir="$summary_dir/counts"
-mkdir -p "$busco_lineage_dir" "$busco_euk_dir" "$counts_dir"
+pred_dir="$summary_dir/pred"
+mkdir -p "$busco_lineage_dir" "$busco_euk_dir" "$counts_dir" "$pred_dir"
 
 # taxon-driven lineage BUSCO JSON
 Lbusco_json="$out/busco_${sp}/short_summary.specific.${busco_lineage}.busco_${sp}.json"
@@ -167,7 +171,15 @@ Ebusco_dest="$busco_euk_dir/${species_name}_${taxonID}_Ebusco.json"
 mv "$Ebusco_json" "$Ebusco_dest"
 ln "$Ebusco_dest" "$Ebusco_json"   #keep it accessible at the original BUSCO output location too
 
+# predicted (merged) annotation relocated to summary/, hardlinked back to the species location
+# (canonical inode lives in summary/pred so the species folder can be removed safely)
+pred_dest="$pred_dir/${species_name}_${taxonID}_pred.gff"
+rm -f "$pred_dest"                  #refresh on reruns
+mv "$merged" "$pred_dest"          #relocate the prediction into the central summary tree
+ln "$pred_dest" "$merged"          #link it back so the original species location stays valid
+
 echo "[6/6] BUSCO JSON summaries collected into $busco_lineage_dir/ and $busco_euk_dir/"
+echo "      Predicted annotation collected into $pred_dir/"
 
 # count gene and transcript models in the prediction (col3 feature type;
 # IsoQuant GTF uses "transcript", AGAT GFF uses "mRNA" — match both)
@@ -182,3 +194,4 @@ echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
 echo "Summary outputs in: $summary_dir/ (busco_lineage/, busco_eukaryote/, counts/)"
 echo "Build the summary tables with: python3 scripts/make_summary_tables.py"
+echo ">ENDING at $(date)"
