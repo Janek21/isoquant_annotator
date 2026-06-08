@@ -78,8 +78,40 @@ else
 	genome_plain="$genome"
 fi
 
-gffread "$out/longest_${sp}.gtf" -g "$genome_plain" -w "$out/transcripts_${sp}.fa"
+# IsoQuant's reference-free mode can emit a transcript model that runs past the
+# contig end (e.g. kawagutii: a 1..244 model on the 232 bp contig
+# VSDK01014088.1). gffread then aborts the whole transcriptome build with
+# "GFaSeqGet: subsequence cannot be larger than ...". Collect the IDs of any
+# out-of-bounds models and let gffread discard them (--nids), so it handles the
+# gene/transcript/exon hierarchy itself. Valid species yield an empty list and
+# the gffread call is unchanged.
+oob_ids="$out/oob_${sp}.ids"
+awk -v genome="$genome_plain" '
+	BEGIN {
+		# contig lengths straight from the genome FASTA (no samtools needed)
+		while ((getline line < genome) > 0) {
+			if (substr(line, 1, 1) == ">") {
+				split(substr(line, 2), h, /[ \t]/); cur = h[1]; len[cur] = 0
+			} else {
+				len[cur] += length(line)
+			}
+		}
+		close(genome)
+	}
+	/^#/ { next }
+	($1 in len) && ($5 + 0 > len[$1]) && match($9, /transcript_id=[^;]+/) {
+		print substr($9, RSTART + 14, RLENGTH - 14)
+	}
+' "$out/longest_${sp}.gtf" | sort -u > "$oob_ids"
 
+if [ -s "$oob_ids" ]; then
+	echo "    Dropping $(wc -l < "$oob_ids") out-of-bounds transcript model(s) before gffread"
+	gffread --nids "$oob_ids" "$out/longest_${sp}.gtf" -g "$genome_plain" -w "$out/transcripts_${sp}.fa"
+else
+	gffread "$out/longest_${sp}.gtf" -g "$genome_plain" -w "$out/transcripts_${sp}.fa"
+fi
+
+rm -f "$oob_ids"
 if [[ "$genome" == *.gz ]]; then
 	rm -f "$genome_plain"
 fi
