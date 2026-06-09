@@ -83,11 +83,15 @@ else #no annotation
 fi
 
 #2. select runs from the master TSV and resolve their ENA URLs
-echo "Searching master TSV for $sp $sp_extra"
-search_res=$(grep -i "$sp" "$master_tsv" | grep -i "$sp_extra")
+#match the organism-name column (field 5) exactly, or as a "<name> <strain>" prefix (avoid gracilis vs neogracilis))
+#name first (strain-specific), then (genus + species)
+as_words=$(echo "$species_name" | tr '_' ' ')
+binom=$(echo "$as_words" | awk '{print $1, $2}')
+echo "Searching master TSV for organism '$as_words' (binomial '$binom')"
+search_res=$(awk -F'\t' -v q="$as_words" 'BEGIN{q=tolower(q)} {o=tolower($5)} o==q || index(o, q" ")==1' "$master_tsv")
 if [ -z "$search_res" ]; then
-	echo "No match for both terms. Falling back to: $sp"
-	search_res=$(grep -i "$sp" "$master_tsv")
+	echo "No exact organism match. Falling back to binomial '$binom'."
+	search_res=$(awk -F'\t' -v q="$binom" 'BEGIN{q=tolower(q)} {o=tolower($5)} o==q || index(o, q" ")==1' "$master_tsv")
 fi
 echo "$search_res" > "$species_name/full_srr.tsv"
 
