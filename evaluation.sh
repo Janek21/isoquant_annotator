@@ -213,11 +213,27 @@ ln "$pred_dest" "$merged"          #link it back so the original species locatio
 echo "[6/6] BUSCO JSON summaries collected into $busco_lineage_dir/ and $busco_euk_dir/"
 echo "      Predicted annotation collected into $pred_dir/"
 
-# count gene and transcript models in the prediction (col3 feature type;
-# IsoQuant GTF uses "transcript", AGAT GFF uses "mRNA" — match both)
-# the per-species files below are aggregated later by scripts/make_counts_summary.sh
-gene_count=$(cut -f3 "$merged" | grep -cxF "gene" || true)
-transcript_count=$(cut -f3 "$merged" | grep -cxE 'transcript|mRNA' || true)
+#count gene/transcript models robustly across annotation types
+count_unique_attr() {   # $1=file  $2=attribute key (gene_id|transcript_id)
+	awk -v key="$2" '
+		BEGIN { re = "(^|[^A-Za-z0-9_])" key "[ =]\"?" }
+		/^#/ { next }
+		{ if (match($0, re)) {
+			v = substr($0, RSTART + RLENGTH); sub(/[";[:space:]].*$/, "", v)
+			if (v != "" && !(v in seen)) { seen[v] = 1; n++ }
+		} }
+		END { print n + 0 }
+	' "$1"
+}
+
+gene_count=$(count_unique_attr "$merged" gene_id)
+if [ "$gene_count" -eq 0 ]; then
+	gene_count=$(cut -f3 "$merged" | grep -cxE 'gene|[A-Za-z_]*gene' || true)
+fi
+transcript_count=$(count_unique_attr "$merged" transcript_id)
+if [ "$transcript_count" -eq 0 ]; then
+	transcript_count=$(cut -f3 "$merged" | grep -cxE 'transcript|mRNA|[A-Za-z_]*RNA' || true)
+fi
 echo "$gene_count" > "$counts_dir/${species_name}_${taxonID}_gc.txt"
 echo "$transcript_count" > "$counts_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
