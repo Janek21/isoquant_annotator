@@ -73,10 +73,10 @@ if [ -n "$plain_annotation" ]; then
 elif [ -n "$gzipped_annotation" ]; then
 	echo "GFF compressed to GTF"
 	#uncompress to a real file first (AGAT --gff cannot read from stdin), then convert
-	unpigz -c "$gzipped_annotation" > "$species_name/data/input/raw_annotation.gff"
-	agat_convert_sp_gff2gtf.pl --gff "$species_name/data/input/raw_annotation.gff" --config "$agat_cfg" -o "$species_name/data/input/clean_annotation.gtf"
+	unpigz -c "$gzipped_annotation" > "$species_name/data/input/raw_${species_name}_$$_annotation.gff"
+	agat_convert_sp_gff2gtf.pl --gff "$species_name/data/input/raw_${species_name}_$$_annotation.gff" --config "$agat_cfg" -o "$species_name/data/input/clean_annotation.gtf"
 	gtf_fix
-	rm -f "$species_name/data/input/raw_annotation.gff"
+	rm -f "$species_name/data/input/raw_${species_name}_$$_annotation.gff"
 else #no annotation
 	echo "No annotation file found. IsoQuant will run in de novo mode (without --genedb)."
 	genedb_arg=""
