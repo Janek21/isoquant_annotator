@@ -14,6 +14,9 @@ conda activate buscomania
 sp=$(echo "$species_name" | cut -f2 -d"_")
 sp_extra=$(echo "$species_name" | cut -f3 -d"_")
 data="$species_name/data"
+
+rm -rf "$species_name"
+
 mkdir -p "$species_name" logs
 
 #1. Copy assembly and annotation if its present
@@ -95,7 +98,7 @@ if [ -z "$search_res" ]; then
 fi
 echo "$search_res" > "$species_name/full_srr.tsv"
 
-python3 "$scripts_dir/select_accessions.py" -i "$species_name/full_srr.tsv" -o "$species_name/srr_select.tsv" -s "$species_name/srr_list.tsv" -e error_species.txt -t 15 -m 8
+python3 "$scripts_dir/select_accessions.py" -i "$species_name/full_srr.tsv" -o "$species_name/srr_select.tsv" -s "$species_name/srr_list.tsv" -e error_species.txt -t 15 -m 18
 
 #if nothing survived the filtering (file missing or empty), clean up and abort this species 
 #[Species, SRA, size] rows are logged to error_species.txt by select_accessions.py

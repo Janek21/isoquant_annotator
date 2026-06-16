@@ -4,6 +4,7 @@
 Reads the shared summary/ tree:
   summary/counts/<species>_<taxonID>_gc.txt   gene-model count
   summary/counts/<species>_<taxonID>_tc.txt   transcript-model count
+  summary/counts/<species>_<taxonID>_gs.txt   genome size (bp, total assembly length)
   summary/busco_lineage/<species>_<taxonID>_Lbusco.json    taxon-driven lineage BUSCO
   summary/busco_eukaryote/<species>_<taxonID>_Ebusco.json  Eukaryota BUSCO
 
@@ -83,6 +84,7 @@ def main():
     for sp in species:
         gene_count = read_count(os.path.join(counts_dir, f"{sp}_gc.txt"))
         transcripts_count = read_count(os.path.join(counts_dir, f"{sp}_tc.txt"))
+        genome_size = read_count(os.path.join(counts_dir, f"{sp}_gs.txt"))
         lineage_busco, lineage_used = busco_fields(
             os.path.join(lineage_dir, f"{sp}_Lbusco.json"))
         eukaryote_busco, _ = busco_fields(
@@ -92,6 +94,7 @@ def main():
             "species": sp,
             "gene_count": gene_count,
             "transcripts_count": transcripts_count,
+            "genome_size_bp": genome_size,
         })
         busco_records.append({
             "species": sp,
@@ -101,7 +104,8 @@ def main():
         })
 
     counts_df = pd.DataFrame(
-        counts_records, columns=["species", "gene_count", "transcripts_count"])
+        counts_records,
+        columns=["species", "gene_count", "transcripts_count", "genome_size_bp"])
     busco_df = pd.DataFrame(
         busco_records,
         columns=["species", "lineage_busco", "eukaryote_busco", "lineage_used"])

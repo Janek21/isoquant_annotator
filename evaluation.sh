@@ -43,7 +43,13 @@ for plat in pacbio nanopore; do
 	g=$(find "$species_name/output/$plat" -name "*transcript_models.gtf" 2>/dev/null | head -1 || true)
 	if [ -n "$g" ]; then
 		echo "[1/5] Found $plat model: $g"
-		gtfs+=("$g")
+		# AGAT derives its temp dir name (agat_tmp_<input-basename>) in the CWD.
+		# Every IsoQuant model is OUT.transcript_models.gtf, so concurrent eval
+		# jobs from the shared submit dir collide on agat_tmp_OUT.transcript_models.
+		# Feed AGAT a uniquely named symlink so each job gets its own temp dir.
+		link="$out/${species_name}_${plat}.transcript_models.gtf"
+		ln -sf "$(realpath "$g")" "$link"
+		gtfs+=("$link")
 	fi
 done
 
@@ -213,30 +219,35 @@ ln "$pred_dest" "$merged"          #link it back so the original species locatio
 echo "[6/6] BUSCO JSON summaries collected into $busco_lineage_dir/ and $busco_euk_dir/"
 echo "      Predicted annotation collected into $pred_dir/"
 
-#count gene/transcript models robustly across annotation types
-count_unique_attr() {   # $1=file  $2=attribute key (gene_id|transcript_id)
-	awk -v key="$2" '
-		BEGIN { re = "(^|[^A-Za-z0-9_])" key "[ =]\"?" }
+# count gene/transcript models with gffread. --keep-genes normalises every input
+# into gene + transcript records: real gene features are preserved (so AGAT
+# clustered loci are honoured rather than the per-transcript gene_id attribute,
+# which --table @geneid would overcount), and one gene + one transcript is
+# synthesised per id when the input lacks gene/transcript features. Counting the
+# normalised col3 feature types is then uniform across annotation flavours.
+read -r gene_count transcript_count < <(
+	{ gffread "$merged" --keep-genes -o - 2>/dev/null || true; } | awk -F'\t' '
 		/^#/ { next }
-		{ if (match($0, re)) {
-			v = substr($0, RSTART + RLENGTH); sub(/[";[:space:]].*$/, "", v)
-			if (v != "" && !(v in seen)) { seen[v] = 1; n++ }
-		} }
-		END { print n + 0 }
-	' "$1"
-}
-
-gene_count=$(count_unique_attr "$merged" gene_id)
-if [ "$gene_count" -eq 0 ]; then
-	gene_count=$(cut -f3 "$merged" | grep -cxE 'gene|[A-Za-z_]*gene' || true)
-fi
-transcript_count=$(count_unique_attr "$merged" transcript_id)
-if [ "$transcript_count" -eq 0 ]; then
-	transcript_count=$(cut -f3 "$merged" | grep -cxE 'transcript|mRNA|[A-Za-z_]*RNA' || true)
-fi
+		$3 ~ /^([A-Za-z_]*gene)$/                { g++; next }
+		$3 ~ /^(transcript|mRNA|[A-Za-z_]*RNA)$/ { t++ }
+		END { print g + 0, t + 0 }'
+)
 echo "$gene_count" > "$counts_dir/${species_name}_${taxonID}_gc.txt"
 echo "$transcript_count" > "$counts_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
+
+# genome size = total assembly length (exact; sum of contig lengths, incl. N gaps)
+fai="${genome}.fai"
+if [ -s "$fai" ]; then
+	genome_size=$(cut -f2 "$fai" | awk '{s+=$1} END{print s+0}')
+elif [[ "$genome" == *.gz ]]; then
+	genome_size=$(pigz -dcp "${SLURM_CPUS_PER_TASK:-8}" "$genome" \
+		| awk '/^>/{next} {s+=length($0)} END{print s+0}')
+else
+	genome_size=$(awk '/^>/{next} {s+=length($0)} END{print s+0}' "$genome")
+fi
+echo "$genome_size" > "$counts_dir/${species_name}_${taxonID}_gs.txt"
+echo "      Genome size: ${genome_size} bp"
 
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
