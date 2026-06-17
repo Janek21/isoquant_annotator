@@ -232,8 +232,6 @@ read -r gene_count transcript_count < <(
 		$3 ~ /^(transcript|mRNA|[A-Za-z_]*RNA)$/ { t++ }
 		END { print g + 0, t + 0 }'
 )
-echo "$gene_count" > "$counts_dir/${species_name}_${taxonID}_gc.txt"
-echo "$transcript_count" > "$counts_dir/${species_name}_${taxonID}_tc.txt"
 echo "      Gene models: $gene_count | Transcript models: $transcript_count"
 
 # genome size = total assembly length (exact; sum of contig lengths, incl. N gaps)
@@ -246,8 +244,45 @@ elif [[ "$genome" == *.gz ]]; then
 else
 	genome_size=$(awk '/^>/{next} {s+=length($0)} END{print s+0}' "$genome")
 fi
-echo "$genome_size" > "$counts_dir/${species_name}_${taxonID}_gs.txt"
 echo "      Genome size: ${genome_size} bp"
+
+# ── 7. derived metrics + one consolidated per-species file ────────
+# Coding-fraction inputs come from the longest-isoform transcriptome (step 3) and
+# its TransDecoder ORFs (step 4):
+#   transcriptome_tx = transcript models that entered ORF calling (longest isoform/gene)
+#   coding_tx        = unique source transcripts carrying >=1 predicted ORF
+#                      (TransDecoder peptide id minus its trailing .p<N> suffix)
+tx_fa="$out/transcripts_${sp}.fa"
+prot_fa="$out/prot_${sp}.fa"
+transcriptome_tx=$(grep -c '^>' "$tx_fa" 2>/dev/null || echo 0)
+coding_tx=$( { grep '^>' "$prot_fa" 2>/dev/null || true; } \
+	| awk '{sub(/^>/,"",$1); sub(/\.p[0-9]+$/,"",$1); print $1}' | sort -u | wc -l)
+
+# One TSV per species (header + one data row) holding the counts and the four
+# derived metrics. Replaces the old scattered _gc/_tc/_gs files. Zero denominators
+# yield NA so a bad species never aborts the run or poisons the table.
+#   gene_density_per_mb       = gene_count       / (genome_size / 1e6)
+#   transcript_density_per_mb = transcript_count / (genome_size / 1e6)
+#   isoforms_per_gene         = transcript_count / gene_count
+#   coding_fraction           = coding_tx        / transcriptome_tx
+metrics_file="$counts_dir/${species_name}_${taxonID}_metrics.tsv"
+awk -v sp="${species_name}_${taxonID}" \
+	-v gc="$gene_count" -v tc="$transcript_count" -v gs="$genome_size" \
+	-v cod="$coding_tx" -v ntx="$transcriptome_tx" 'BEGIN {
+		OFS = "\t"
+		gd  = (gs  > 0) ? sprintf("%.2f", gc / (gs / 1e6)) : "NA"
+		td  = (gs  > 0) ? sprintf("%.2f", tc / (gs / 1e6)) : "NA"
+		ipg = (gc  > 0) ? sprintf("%.3f", tc / gc)         : "NA"
+		cf  = (ntx > 0) ? sprintf("%.4f", cod / ntx)       : "NA"
+		print "species", "gene_count", "transcript_count", "genome_size_bp", \
+		      "coding_transcripts", "transcriptome_transcripts", \
+		      "gene_density_per_mb", "transcript_density_per_mb", \
+		      "isoforms_per_gene", "coding_fraction"
+		print sp, gc, tc, gs, cod, ntx, gd, td, ipg, cf
+	}' > "$metrics_file"
+read -r _ _ _ _ _ _ gd td ipg cf < <(tail -1 "$metrics_file")
+echo "      Metrics: gene_density=${gd}/Mb transcript_density=${td}/Mb isoforms/gene=${ipg} coding_fraction=${cf}"
+echo "      Consolidated metrics -> $metrics_file"
 
 echo "Done. Merged annotation: $merged"
 echo "BUSCO results in: $out/busco_${sp}/ and $out/busco_euk_${sp}/"
