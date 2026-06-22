@@ -84,6 +84,16 @@ def read_metrics(counts_dir):
     return pd.concat(frames, ignore_index=True).reindex(columns=METRIC_COLUMNS)
 
 
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from buscoPlot import run as _busco_plot
+
+
+def run_busco_plot(glob_pattern, output_path):
+    _busco_plot(glob_pattern, output_path)
+
+
 def main():
     summary_dir = sys.argv[1] if len(sys.argv) > 1 else "summary"
     counts_dir = os.path.join(summary_dir, "counts")
@@ -132,6 +142,17 @@ def main():
     n = general_df["species"].nunique()
     print(f"Wrote 3 tables for {n} species to {summary_dir}/:")
     print("  counts_summary.tsv, busco_summary.tsv, general_summary.tsv")
+
+    lin_dir = os.path.join(summary_dir, "busco_lineage")
+    euk_dir = os.path.join(summary_dir, "busco_eukaryote")
+    plots = [
+        (os.path.join(lin_dir, "*_Lbusco.json"),
+         os.path.join(lin_dir, "busco_lineage_summary.png")),
+        (os.path.join(euk_dir, "*_Ebusco.json"),
+         os.path.join(euk_dir, "busco_eukaryote_summary.png")),
+    ]
+    for glob_pat, out_path in plots:
+        run_busco_plot(glob_pat, out_path)
 
 
 if __name__ == "__main__":
